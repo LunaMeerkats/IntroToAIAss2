@@ -1,6 +1,5 @@
 import sys
 import itertools
-import collections
 import re
 
 # Function to parse the knowledge base and query from the input file
@@ -44,6 +43,104 @@ def parse_kb_and_query(filename):
 
     return kb, query
 
+# Function to parse a propositional expression and extract the variables and clauses
+def parse_expression(expression):
+    clauses = re.split(r'\s*;\s*', expression)  # Split clauses using semicolons
+    print(clauses)
+    # Find unique propositional variables
+    variables = sorted(set(re.findall(r'\w+', expression)))
+    return variables, clauses
+
+# Function to evaluate a propositional expression with a given truth assignment
+def evaluate_expression(expression, truth_assignment):
+    # Replace logical operators with Python operators
+    expression = expression.replace("=>", " or not ")  # Implication
+    expression = expression.replace("<=>", " == ")  # Biconditional
+    expression = expression.replace("&", " and ")  # Conjunction
+    expression = expression.replace("||", " or ")  # Disjunction
+    expression = expression.replace("~", " not ")  # Negation
+
+    # Replace variables with truth values
+    for var, val in truth_assignment.items():
+        expression = re.sub(r'\b' + var + r'\b', str(val), expression)
+
+    # Evaluate the expression
+    return eval(expression)
+
+# Function to perform forward chaining
+def forward_chaining_entailment(kb, query):
+    # Initialize the list of inferred propositions
+    inferred = set()
+
+    # Convert KB into a list of Horn clauses
+    horn_clauses = []
+    for clause in kb:
+        # Identify the conclusion (head) and the premises (body)
+        if "=>" in clause:
+            premises, conclusion = clause.split("=>")
+            horn_clauses.append((premises.strip(), conclusion.strip()))
+        else:
+            # If there's no implication, treat it as a direct fact
+            inferred.add(clause.strip())
+
+    # Loop until no new inferences can be made
+    new_inferences = True
+    while new_inferences:
+        new_inferences = False
+
+        for premises, conclusion in horn_clauses:
+            # Split premises into individual propositions
+            premises_set = {p.strip() for p in premises.split("&")}
+
+            # Check if all premises are in the inferred set
+            if premises_set.issubset(inferred) and conclusion not in inferred:
+                inferred.add(conclusion)
+                new_inferences = True
+
+    # Return whether the query is in the inferred set
+    return query in inferred, list(inferred)
+
+# Function to perform backward chaining
+def backward_chaining_entailment(kb, query):
+    # Convert KB into a list of Horn clauses
+    horn_clauses = []
+    for clause in kb:
+        if "=>" in clause:
+            premises, conclusion = clause.split("=>")
+            horn_clauses.append((premises.strip(), conclusion.strip()))
+        else:
+            # If there's no implication, treat it as a direct fact
+            horn_clauses.append(("", clause.strip()))
+
+    # Helper function to perform recursive backward chaining
+    def bc_recursive(current_query, inferred):
+        # If the current query is already inferred, return True
+        if current_query in inferred:
+            return True
+
+        # Find clauses where the current query is the conclusion
+        relevant_clauses = [clause for clause in horn_clauses if clause[1] == current_query]
+
+        # If no such clauses, return False
+        if not relevant_clauses:
+            return False
+
+        # Attempt to infer the current query
+        for premises, _ in relevant_clauses:
+            # Recursively check all premises
+            premises_set = {p.strip() for p in premises.split("&") if p.strip()}
+            if all(bc_recursive(premise, inferred) for premise in premises_set):
+                inferred.add(current_query)
+                return True
+
+        return False
+
+    inferred = set()  # Set to track inferred propositions
+    success = bc_recursive(query, inferred)
+
+    return success, list(inferred)
+
+
 # Main function to run the inference engine from the command line
 def main():
     if len(sys.argv) < 3:
@@ -55,9 +152,6 @@ def main():
 
     try:
         kb, query = parse_kb_and_query(filename)
-
-        print(kb)
-        print(query)
         
         if method == "TT":
             result = truth_table_entailment(kb, query)
