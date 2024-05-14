@@ -52,21 +52,20 @@ def parse_expression(expression):
 
 # Function to evaluate a propositional expression with a given truth assignment
 def evaluate_expression(expression, truth_assignment):
-    # Replace logical operators with Python operators
+    # Replace logical operators with Python operators    
     expression = expression.replace("=>", " or not ")  # Implication
     expression = expression.replace("<=>", " == ")  # Biconditional
     expression = expression.replace("&", " and ")  # Conjunction
     expression = expression.replace("||", " or ")  # Disjunction
     expression = expression.replace("~", " not ")  # Negation
-
+    
     # Replace variables with truth values
     for var, val in truth_assignment.items():
         expression = re.sub(r'\b' + var + r'\b', str(val), expression)
-
+    
     # Evaluate the expression
     return eval(expression)
 
-# Function to perform forward chaining
 def forward_chaining_entailment(kb, query):
     inferred = set()
     horn_clauses = []
@@ -89,13 +88,18 @@ def forward_chaining_entailment(kb, query):
                 inferred.add(conclusion)
                 new_inferences = True
 
-    prefix = "YES:" if query in inferred else "NO:"
+    print("Inferred:", inferred)  # Debug print
+
+    # Check if all components of the query are in the inferred set
+    query_components = query.split("&")
+    query_holds = all(component.strip() in inferred for component in query_components)
+
+    prefix = "YES:" if query_holds or query in kb else "NO:"
     inferred_list_str = ", ".join(sorted(inferred))  # Sort inferred propositions alphabetically
     result = f"{prefix} {inferred_list_str}"
     
     return result
 
-# Function to perform backward chaining
 def backward_chaining_entailment(kb, query):
     # Convert KB into a list of Horn clauses
     horn_clauses = []
@@ -131,33 +135,33 @@ def backward_chaining_entailment(kb, query):
         return False
 
     inferred = set()  # Set to track inferred propositions
-    success = bc_recursive(query, inferred)
+
+    # Parse the query to handle conjunctions
+    query_components = query.split("&")
+    success = all(bc_recursive(component.strip(), inferred) for component in query_components)
 
     return success, list(inferred)
 
 def truth_table_entailment(kb, query):
     # Parse the expression to get the list of variables
-    variables, _ = parse_expression(" & ".join(kb) + " & " + query)
+    variables, _ = parse_expression(" & ".join(kb))
+    
+    # Check if the query variable is in the list of variables
+    query_variables = set(re.findall(r'\w+', query))
+    if not query_variables.issubset(set(variables)):
+        return "NO"
+    
     num_vars = len(variables)
     all_truth_assignments = list(itertools.product([False, True], repeat=num_vars))
     variable_index = {var: i for i, var in enumerate(variables)}
+    
     valid_assignments = 0
-    
-    # Identify the single variables in the KB that represent constant truths
-    constant_truths = set()
-    for clause in kb:
-        if "=>" not in clause and "&" not in clause:
-            constant_truths.add(clause.strip())
-    
-    # Filter truth assignments based on the presence of constant truths
-    filtered_truth_assignments = [
-        assignment for assignment in all_truth_assignments
-        if all(assignment[variable_index[var]] for var in constant_truths)
-    ]
-    
-    for assignment in filtered_truth_assignments:
+    kb_holds_assignments = 0
+
+    for assignment in all_truth_assignments:
         truth_assignment = {var: assignment[variable_index[var]] for var in variables}
         kb_holds = True
+        
         for clause in kb:
             if "=>" in clause:
                 premises, conclusion = clause.split("=>")
@@ -171,12 +175,13 @@ def truth_table_entailment(kb, query):
                     kb_holds = False
                     break
 
-        if kb_holds and evaluate_expression(query, truth_assignment):
-            valid_assignments += 1
+        if kb_holds:
+            kb_holds_assignments += 1
+            if evaluate_expression(query, truth_assignment):
+                valid_assignments += 1
 
-    result = f"YES: {valid_assignments}" if valid_assignments > 0 else "NO"
+    result = f"YES: {valid_assignments}" if valid_assignments > 0 and valid_assignments == kb_holds_assignments else "NO"
     return result
-
 
 # Main function to run the inference engine from the command line
 def main():
