@@ -46,7 +46,6 @@ def parse_kb_and_query(filename):
 # Function to parse a propositional expression and extract the variables and clauses
 def parse_expression(expression):
     clauses = re.split(r'\s*;\s*', expression)  # Split clauses using semicolons
-    print(clauses)
     # Find unique propositional variables
     variables = sorted(set(re.findall(r'\w+', expression)))
     return variables, clauses
@@ -97,8 +96,16 @@ def forward_chaining_entailment(kb, query):
                 inferred.add(conclusion)
                 new_inferences = True
 
-    # Return whether the query is in the inferred set
-    return query in inferred, list(inferred)
+    # Check if the query is in inferred and create the appropriate prefix
+    prefix = "YES:" if query in inferred else "NO:"
+
+    # Join the elements of the inferred list into a comma-separated string
+    inferred_list_str = ", ".join(sorted(inferred))  # Sort for consistent output
+
+    # Format the final string
+    result = f"{prefix} {inferred_list_str}"
+    
+    return result
 
 # Function to perform backward chaining
 def backward_chaining_entailment(kb, query):
@@ -138,8 +145,49 @@ def backward_chaining_entailment(kb, query):
     inferred = set()  # Set to track inferred propositions
     success = bc_recursive(query, inferred)
 
-    return success, list(inferred)
+    return success, sorted(inferred)  # Sort for consistent output
+# Function to perform truth table entailment
+def truth_table_entailment(kb, query):
+    # Parse the expression to get the list of variables
+    variables, _ = parse_expression(" & ".join(kb) + " & " + query)
+    num_vars = len(variables)
+    
+    # Generate all possible truth assignments for the variables
+    truth_assignments = list(itertools.product([False, True], repeat=num_vars))
+    
+    # Create a mapping from variable names to their index positions
+    variable_index = {var: i for i, var in enumerate(variables)}
 
+    entails = True  # Flag to check if KB entails the query
+    valid_assignments = 0  # Counter for valid truth assignments where KB is true
+    models = []  # List to store models where KB holds true
+
+    # Iterate through each truth assignment
+    for assignment in truth_assignments:
+        # Create a dictionary mapping each variable to its truth value in this assignment
+        truth_assignment = {var: assignment[variable_index[var]] for var in variables}
+
+        # Evaluate all clauses in the KB with the current truth assignment
+        kb_holds = True  # Initialize kb_holds to True
+        for clause in kb:
+            if not evaluate_expression(clause, truth_assignment):
+                kb_holds = False  # If any clause evaluates to False, set kb_holds to False
+                break  # No need to check further if one clause is False
+
+        # If KB holds under the current truth assignment
+        if kb_holds:
+            # Check if the query is true under the current truth assignment
+            if not evaluate_expression(query, truth_assignment):
+                entails = False  # If query is false, KB does not entail the query
+            else:
+                valid_assignments += 1  # Increment the count of valid truth assignments
+                models.append(truth_assignment)  # Store the current truth assignment as a model
+
+    # Determine the result based on the entails flag
+    # Return the result along with the count of valid truth assignments
+    result = f"YES: {valid_assignments}" if valid_assignments>0 else "NO"
+    
+    return result
 
 # Main function to run the inference engine from the command line
 def main():
