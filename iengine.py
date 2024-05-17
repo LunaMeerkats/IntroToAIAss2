@@ -7,15 +7,13 @@ def parse_kb_and_query(filename):
     with open(filename, 'r') as file:
         lines = [line.strip() for line in file if line.strip()]  # Strip and ignore empty lines
 
-    # Initialize KB and query
     tell_section = ""
     ask_section = ""
 
-    # Loop through the lines to identify TELL and ASK sections
     reading_tell = False
     reading_ask = False
 
-    for i, line in enumerate(lines):
+    for line in lines:
         if line == "TELL":
             reading_tell = True
             reading_ask = False
@@ -23,21 +21,17 @@ def parse_kb_and_query(filename):
             reading_ask = True
             reading_tell = False
         elif reading_tell:
-            # If we're reading TELL, append this line to tell_section
             tell_section = line
             reading_tell = False  # Stop reading after capturing the next line
         elif reading_ask:
-            # If we're reading ASK, set this line as ask_section
             ask_section = line
             reading_ask = False  # Stop reading after capturing the next line
     
-    # Ensure TELL and ASK sections are valid
     if not tell_section:
         raise ValueError("Missing or invalid 'TELL' section in the input file.")
     if not ask_section:
         raise ValueError("Missing or invalid 'ASK' section in the input file.")
 
-    # Parse the knowledge base into Horn clauses
     kb = [clause.strip() for clause in tell_section.split(";") if clause.strip()]
     query = ask_section.strip()
 
@@ -46,24 +40,20 @@ def parse_kb_and_query(filename):
 # Function to parse a propositional expression and extract the variables and clauses
 def parse_expression(expression):
     clauses = re.split(r'\s*;\s*', expression)  # Split clauses using semicolons
-    # Find unique propositional variables
     variables = sorted(set(re.findall(r'\w+', expression)))
     return variables, clauses
 
 # Function to evaluate a propositional expression with a given truth assignment
 def evaluate_expression(expression, truth_assignment):
-    # Replace logical operators with Python operators    
     expression = expression.replace("=>", " or not ")  # Implication
     expression = expression.replace("<=>", " == ")  # Biconditional
     expression = expression.replace("&", " and ")  # Conjunction
     expression = expression.replace("||", " or ")  # Disjunction
     expression = expression.replace("~", " not ")  # Negation
     
-    # Replace variables with truth values
     for var, val in truth_assignment.items():
         expression = re.sub(r'\b' + var + r'\b', str(val), expression)
     
-    # Evaluate the expression
     return eval(expression)
 
 def forward_chaining_entailment(kb, query):
@@ -90,43 +80,34 @@ def forward_chaining_entailment(kb, query):
 
     print("Inferred:", inferred)  # Debug print
 
-    # Check if all components of the query are in the inferred set
-    query_components = query.split("&")
-    query_holds = all(component.strip() in inferred for component in query_components)
+    query_components = [q.strip() for q in query.split("||")]
+    query_holds = any(all(component in inferred for component in conjunct.split("&")) for conjunct in query_components)
 
-    prefix = "YES:" if query_holds or query in kb else "NO:"
-    inferred_list_str = ", ".join(sorted(inferred))  # Sort inferred propositions alphabetically
+    prefix = "YES:" if query_holds else "NO:"
+    inferred_list_str = ", ".join(sorted(inferred))
     result = f"{prefix} {inferred_list_str}"
     
     return result
 
 def backward_chaining_entailment(kb, query):
-    # Convert KB into a list of Horn clauses
     horn_clauses = []
     for clause in kb:
         if "=>" in clause:
             premises, conclusion = clause.split("=>")
             horn_clauses.append((premises.strip(), conclusion.strip()))
         else:
-            # If there's no implication, treat it as a direct fact
             horn_clauses.append(("", clause.strip()))
 
-    # Helper function to perform recursive backward chaining
     def bc_recursive(current_query, inferred):
-        # If the current query is already inferred, return True
         if current_query in inferred:
             return True
 
-        # Find clauses where the current query is the conclusion
         relevant_clauses = [clause for clause in horn_clauses if clause[1] == current_query]
 
-        # If no such clauses, return False
         if not relevant_clauses:
             return False
 
-        # Attempt to infer the current query
         for premises, _ in relevant_clauses:
-            # Recursively check all premises
             premises_set = {p.strip() for p in premises.split("&") if p.strip()}
             if all(bc_recursive(premise, inferred) for premise in premises_set):
                 inferred.add(current_query)
@@ -134,19 +115,15 @@ def backward_chaining_entailment(kb, query):
 
         return False
 
-    inferred = set()  # Set to track inferred propositions
-
-    # Parse the query to handle conjunctions
+    inferred = set()
     query_components = query.split("&")
     success = all(bc_recursive(component.strip(), inferred) for component in query_components)
 
     return success, list(inferred)
 
 def truth_table_entailment(kb, query):
-    # Parse the expression to get the list of variables
     variables, _ = parse_expression(" & ".join(kb))
     
-    # Check if the query variable is in the list of variables
     query_variables = set(re.findall(r'\w+', query))
     if not query_variables.issubset(set(variables)):
         return "NO"
@@ -183,7 +160,6 @@ def truth_table_entailment(kb, query):
     result = f"YES: {valid_assignments}" if valid_assignments > 0 and valid_assignments == kb_holds_assignments else "NO"
     return result
 
-# Main function to run the inference engine from the command line
 def main():
     if len(sys.argv) < 3:
         print("Usage: python iengine.py <filename> <method>")
@@ -202,7 +178,7 @@ def main():
         elif method == "BC":
             success, inferred = backward_chaining_entailment(kb, query)
             if success:
-                inferred_str = ", ".join(sorted(inferred))  # Sort for consistent output
+                inferred_str = ", ".join(sorted(inferred))
                 result = f"YES: {inferred_str}"
             else:
                 result = "NO"

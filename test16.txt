@@ -1,4 +1,4 @@
 TELL
 a; b; c;
 ASK
-a & b
+(a & b) || c

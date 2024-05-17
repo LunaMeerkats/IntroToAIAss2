@@ -1,4 +1,4 @@
 TELL
-a => (b => c); b => (c => d); a; b;
+a => b; a;
 ASK
-a & b & (c => d)
+a => b
