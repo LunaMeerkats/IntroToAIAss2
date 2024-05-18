@@ -1,195 +1,90 @@
 import sys
-import itertools
-import re
+from HornKnowledgeBase import HornKnowledgeBase
+from ForwardsChaining import forwards_entails
+from BackwardsChaining import backwards_entails
+from truth_table import truth_table_check_hornkb
 
-# Function to parse the knowledge base and query from the input file
-def parse_kb_and_query(filename):
-    with open(filename, 'r') as file:
-        lines = [line.strip() for line in file if line.strip()]  # Strip and ignore empty lines
+def parse_input(input_str):
+    """
+    Parse the input string to create a Horn Knowledge Base (KB) object.
 
-    tell_section = ""
-    ask_section = ""
+    Args:
+        input_str (str): The input string containing TELL and ASK sections.
 
-    reading_tell = False
-    reading_ask = False
+    Returns:
+        HornKnowledgeBase: The Horn Knowledge Base object.
+    """
+    # Split the input into TELL and ASK sections
+    content = input_str.split("ASK")
 
-    for line in lines:
-        if line == "TELL":
-            reading_tell = True
-            reading_ask = False
-        elif line == "ASK":
-            reading_ask = True
-            reading_tell = False
-        elif reading_tell:
-            tell_section = line
-            reading_tell = False  # Stop reading after capturing the next line
-        elif reading_ask:
-            ask_section = line
-            reading_ask = False  # Stop reading after capturing the next line
-    
-    if not tell_section:
-        raise ValueError("Missing or invalid 'TELL' section in the input file.")
-    if not ask_section:
-        raise ValueError("Missing or invalid 'ASK' section in the input file.")
+    # Check if both TELL and ASK sections are present
+    if len(content) != 2:
+        raise ValueError("Invalid input file format: Missing TELL or ASK section")
 
-    kb = [clause.strip() for clause in tell_section.split(";") if clause.strip()]
-    query = ask_section.strip()
+    # Extract TELL and ASK sections
+    sentences = content[0].strip().replace("TELL", "").strip().split(';')
+    query = content[1].strip()
 
-    return kb, query
+    # Create a new HornKnowledgeBase object
+    kb = HornKnowledgeBase()
 
-# Function to parse a propositional expression and extract the variables and clauses
-def parse_expression(expression):
-    clauses = re.split(r'\s*;\s*', expression)  # Split clauses using semicolons
-    variables = sorted(set(re.findall(r'\w+', expression)))
-    return variables, clauses
-
-# Function to evaluate a propositional expression with a given truth assignment
-def evaluate_expression(expression, truth_assignment):
-    expression = expression.replace("=>", " or not ")  # Implication
-    expression = expression.replace("<=>", " == ")  # Biconditional
-    expression = expression.replace("&", " and ")  # Conjunction
-    expression = expression.replace("||", " or ")  # Disjunction
-    expression = expression.replace("~", " not ")  # Negation
-    
-    for var, val in truth_assignment.items():
-        expression = re.sub(r'\b' + var + r'\b', str(val), expression)
-    
-    return eval(expression)
-
-def forward_chaining_entailment(kb, query):
-    inferred = set()
-    horn_clauses = []
-
-    for clause in kb:
-        if "=>" in clause:
-            premises, conclusion = clause.split("=>")
-            horn_clauses.append((premises.strip(), conclusion.strip()))
-        else:
-            inferred.add(clause.strip())
-
-    new_inferences = True
-    while new_inferences:
-        new_inferences = False
-
-        for premises, conclusion in horn_clauses:
-            premises_set = {p.strip() for p in premises.split("&")}
-
-            if premises_set.issubset(inferred) and conclusion not in inferred:
-                inferred.add(conclusion)
-                new_inferences = True
-
-    print("Inferred:", inferred)  # Debug print
-
-    query_components = [q.strip() for q in query.split("||")]
-    query_holds = any(all(component in inferred for component in conjunct.split("&")) for conjunct in query_components)
-
-    prefix = "YES:" if query_holds else "NO:"
-    inferred_list_str = ", ".join(sorted(inferred))
-    result = f"{prefix} {inferred_list_str}"
-    
-    return result
-
-def backward_chaining_entailment(kb, query):
-    horn_clauses = []
-    for clause in kb:
-        if "=>" in clause:
-            premises, conclusion = clause.split("=>")
-            horn_clauses.append((premises.strip(), conclusion.strip()))
-        else:
-            horn_clauses.append(("", clause.strip()))
-
-    def bc_recursive(current_query, inferred):
-        if current_query in inferred:
-            return True
-
-        relevant_clauses = [clause for clause in horn_clauses if clause[1] == current_query]
-
-        if not relevant_clauses:
-            return False
-
-        for premises, _ in relevant_clauses:
-            premises_set = {p.strip() for p in premises.split("&") if p.strip()}
-            if all(bc_recursive(premise, inferred) for premise in premises_set):
-                inferred.add(current_query)
-                return True
-
-        return False
-
-    inferred = set()
-    query_components = query.split("&")
-    success = all(bc_recursive(component.strip(), inferred) for component in query_components)
-
-    return success, list(inferred)
-
-def truth_table_entailment(kb, query):
-    variables, _ = parse_expression(" & ".join(kb))
-    
-    query_variables = set(re.findall(r'\w+', query))
-    if not query_variables.issubset(set(variables)):
-        return "NO"
-    
-    num_vars = len(variables)
-    all_truth_assignments = list(itertools.product([False, True], repeat=num_vars))
-    variable_index = {var: i for i, var in enumerate(variables)}
-    
-    valid_assignments = 0
-    kb_holds_assignments = 0
-
-    for assignment in all_truth_assignments:
-        truth_assignment = {var: assignment[variable_index[var]] for var in variables}
-        kb_holds = True
-        
-        for clause in kb:
-            if "=>" in clause:
-                premises, conclusion = clause.split("=>")
-                if not evaluate_expression(premises.strip(), truth_assignment) or evaluate_expression(conclusion.strip(), truth_assignment):
-                    continue
-                else:
-                    kb_holds = False
-                    break
-            else:
-                if not evaluate_expression(clause, truth_assignment):
-                    kb_holds = False
-                    break
-
-        if kb_holds:
-            kb_holds_assignments += 1
-            if evaluate_expression(query, truth_assignment):
-                valid_assignments += 1
-
-    result = f"YES: {valid_assignments}" if valid_assignments > 0 and valid_assignments == kb_holds_assignments else "NO"
-    return result
+    # Parse the input and return the Knowledge Base object
+    kb.parse_input(sentences, query)
+    return kb
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python iengine.py <filename> <method>")
-        sys.exit(1)
-
-    filename = sys.argv[1]
-    method = sys.argv[2]
-
+    """
+    Main function to execute the program.
+    """
     try:
-        kb, query = parse_kb_and_query(filename)
-        
-        if method == "TT":
-            result = truth_table_entailment(kb, query)
-        elif method == "FC":
-            result = forward_chaining_entailment(kb, query)
-        elif method == "BC":
-            success, inferred = backward_chaining_entailment(kb, query)
-            if success:
-                inferred_str = ", ".join(sorted(inferred))
-                result = f"YES: {inferred_str}"
-            else:
-                result = "NO"
-        else:
-            print("Invalid method. Use TT, FC, or BC.")
+        # Check if command line arguments are provided
+        if len(sys.argv) < 2:
+            print("Usage: python iengine.py <filename> <method>")
             sys.exit(1)
 
-        print(result)
+        if len(sys.argv) < 3:
+            print("Usage: python iengine.py <filename> <method>\n\tMethods include:\n\tTT: Truth Table Check\n\tFC: Forward Chaining Check\n\tBC: Backwards Chaining Check")
+            sys.exit(1)
 
-    except Exception as e:
-        print(f"Error: {str(e)}")
+        # Extract filename and method from command line arguments
+        filename = sys.argv[1]
+        method = sys.argv[2]
+
+        # Read the input file
+        with open(filename, 'r') as file:
+            input_str = file.read()
+
+        # Parse the input file and create the knowledge base
+        kb = parse_input(input_str)
+
+        # Execute the specified method
+        if method == "FC":
+            result, prop_list = forwards_entails(kb, kb.query)
+        elif method == "BC":
+            result, prop_list = backwards_entails(kb, kb.query)
+        elif method == "TT":
+            result, models_count = truth_table_check_hornkb(kb, kb.query)
+        else:
+            print("Invalid method!")
+            sys.exit(1)
+
+        # Print the result
+        if method in ["FC", "BC"]:
+            if result:
+                print("YES:", ", ".join(sorted(prop_list)))
+            else:
+                print("Result: NO")
+        elif method == "TT":
+            if result == "NO":
+                print("Result: NO")
+            else:
+                print("YES:", models_count)
+
+    except FileNotFoundError:
+        print("File not found.")
+        sys.exit(1)
+    except ValueError as e:
+        print("Error:", e)
         sys.exit(1)
 
 if __name__ == "__main__":
