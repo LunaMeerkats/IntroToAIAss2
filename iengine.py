@@ -1,18 +1,20 @@
 import sys
 from HornKnowledgeBase import HornKnowledgeBase
+from GeneralKnowledgeBase import GeneralKnowledgeBase
 from ForwardsChaining import forwards_entails
 from BackwardsChaining import backwards_entails
 from truth_table import truth_table_check_hornkb
 
-def parse_input(input_str):
+def parse_input(input_str, method):
     """
-    Parse the input string to create a Horn Knowledge Base (KB) object.
+    Parse the input string to create a Knowledge Base (KB) object.
 
     Args:
         input_str (str): The input string containing TELL and ASK sections.
+        method (str): The method to determine which KB to use.
 
     Returns:
-        HornKnowledgeBase: The Horn Knowledge Base object.
+        KnowledgeBase: The Knowledge Base object.
     """
     # Split the input into TELL and ASK sections
     content = input_str.split("ASK")
@@ -25,8 +27,12 @@ def parse_input(input_str):
     sentences = content[0].strip().replace("TELL", "").strip().split(';')
     query = content[1].strip()
 
-    # Create a new HornKnowledgeBase object
-    kb = HornKnowledgeBase()
+    if method == "TT":
+        # Create a new GeneralKnowledgeBase object
+        kb = GeneralKnowledgeBase()
+    else:
+        # Create a new HornKnowledgeBase object
+        kb = HornKnowledgeBase()
 
     # Parse the input and return the Knowledge Base object
     kb.parse_input(sentences, query)
@@ -55,7 +61,7 @@ def main():
             input_str = file.read()
 
         # Parse the input file and create the knowledge base
-        kb = parse_input(input_str)
+        kb = parse_input(input_str, method)
 
         # Execute the specified method
         if method == "FC":
